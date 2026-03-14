@@ -18,6 +18,18 @@ float moveSpeed = 1.0f;
 float turnSpeed = 3.0f;
 float pitchSpeed = 2.5f;
 
+int windowWidth = 1200;
+int windowHeight = 800;
+
+float mouseSensitivity = 0.15f;
+bool ignoreWarp = false;
+bool keySpace = false;
+bool keyShift = false;
+bool keyW = false;
+bool keyA = false;
+bool keyS = false;
+bool keyD = false;
+
 GLuint texGrass = 0;
 GLuint texSky = 0;
 GLuint texMountain = 0;
@@ -643,12 +655,109 @@ void setLighting()
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
     glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
 }
+void drawCrosshair()
+{
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    gluOrtho2D(0, windowWidth, 0, windowHeight);
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    float cx = windowWidth * 0.5f;
+    float cy = windowHeight * 0.5f;
+    float size = 10.0f;
+    float gap = 4.0f;
+
+    glBegin(GL_LINES);
+    // horizontal left
+    glVertex2f(cx - size, cy);
+    glVertex2f(cx - gap, cy);
+
+    // horizontal right
+    glVertex2f(cx + gap, cy);
+    glVertex2f(cx + size, cy);
+
+    // vertical bottom
+    glVertex2f(cx, cy - size);
+    glVertex2f(cx, cy - gap);
+
+    // vertical top
+    glVertex2f(cx, cy + gap);
+    glVertex2f(cx, cy + size);
+    glEnd();
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_LIGHTING);
+
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+void updateMovement()
+{
+    float yawRad = degToRad(yawAngle);
+
+    float dirX = sinf(yawRad);
+    float dirZ = cosf(yawRad);
+
+    float rightX = cosf(yawRad);
+    float rightZ = -sinf(yawRad);
+
+    float verticalSpeed = 0.08f;   // slower than 0.25
+    float horizontalSpeed = 0.18f; // smooth continuous WASD
+
+    if (keyW)
+    {
+        camX += dirX * horizontalSpeed;
+        camZ += dirZ * horizontalSpeed;
+    }
+
+    if (keyS)
+    {
+        camX -= dirX * horizontalSpeed;
+        camZ -= dirZ * horizontalSpeed;
+    }
+
+    if (keyA)
+    {
+        camX += rightX * horizontalSpeed;
+        camZ += rightZ * horizontalSpeed;
+    }
+
+    if (keyD)
+    {
+        camX -= rightX * horizontalSpeed;
+        camZ -= rightZ * horizontalSpeed;
+    }
+
+    if (keySpace)
+        camY += verticalSpeed;
+
+    if (keyShift)
+    {
+        camY -= verticalSpeed;
+        if (camY < 2.0f) camY = 2.0f;
+    }
+}
 
 void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
+    updateMovement();
     float yawRad = degToRad(yawAngle);
     float pitchRad = degToRad(pitchAngle);
 
@@ -687,14 +796,18 @@ void display()
         drawSakuraTree(x, z);
     }
     // drawAxis();
-
+    drawCrosshair();
     glutSwapBuffers();
+    glutPostRedisplay();
 }
 
 
 void reshape(int w, int h)
 {
     if (h == 0) h = 1;
+
+    windowWidth = w;
+    windowHeight = h;
 
     glViewport(0, 0, w, h);
 
@@ -704,17 +817,20 @@ void reshape(int w, int h)
 
     glMatrixMode(GL_MODELVIEW);
 }
+void specialKeys(int key, int, int)
+{
+    if (key == GLUT_KEY_SHIFT_L)
+        keyShift = true;
+}
+void specialKeysUp(int key, int, int)
+{
+    if (key == GLUT_KEY_SHIFT_L)
+        keyShift = false;
+}
+
 
 void keyboard(unsigned char key, int, int)
 {
-    float yawRad = degToRad(yawAngle);
-
-    float dirX = sinf(yawRad);
-    float dirZ = cosf(yawRad);
-
-    float rightX = cosf(yawRad);
-    float rightZ = -sinf(yawRad);
-
     switch (key)
     {
     case 27:
@@ -723,26 +839,22 @@ void keyboard(unsigned char key, int, int)
 
     case 'w':
     case 'W':
-        camX += dirX * moveSpeed;
-        camZ += dirZ * moveSpeed;
+        keyW = true;
         break;
 
     case 's':
     case 'S':
-        camX -= dirX * moveSpeed;
-        camZ -= dirZ * moveSpeed;
+        keyS = true;
         break;
 
     case 'a':
     case 'A':
-        camX -= rightX * moveSpeed;
-        camZ -= rightZ * moveSpeed;
+        keyA = true;
         break;
 
     case 'd':
     case 'D':
-        camX += rightX * moveSpeed;
-        camZ += rightZ * moveSpeed;
+        keyD = true;
         break;
 
     case 'q':
@@ -755,31 +867,79 @@ void keyboard(unsigned char key, int, int)
         yawAngle += turnSpeed;
         break;
 
-    case 'r':
-    case 'R':
-        camY += 1.0f;
+    case ' ':
+        keySpace = true;
         break;
 
-    case 'f':
-    case 'F':
-        camY -= 1.0f;
-        if (camY < 2.0f) camY = 2.0f;
-        break;
-
-        // privire sus
     case 't':
     case 'T':
         pitchAngle += pitchSpeed;
         if (pitchAngle > 89.0f) pitchAngle = 89.0f;
         break;
 
-        // privire jos
     case 'g':
     case 'G':
         pitchAngle -= pitchSpeed;
         if (pitchAngle < -89.0f) pitchAngle = -89.0f;
         break;
     }
+
+    glutPostRedisplay();
+}
+
+void keyboardUp(unsigned char key, int, int)
+{
+    switch (key)
+    {
+    case 'w':
+    case 'W':
+        keyW = false;
+        break;
+
+    case 's':
+    case 'S':
+        keyS = false;
+        break;
+
+    case 'a':
+    case 'A':
+        keyA = false;
+        break;
+
+    case 'd':
+    case 'D':
+        keyD = false;
+        break;
+
+    case ' ':
+        keySpace = false;
+        break;
+    }
+}
+
+void mouseLook(int x, int y)
+{
+    int centerX = windowWidth / 2;
+    int centerY = windowHeight / 2;
+
+    // ignore the fake event generated by glutWarpPointer
+    if (ignoreWarp)
+    {
+        ignoreWarp = false;
+        return;
+    }
+
+    int dx = x - centerX;
+    int dy = y - centerY;
+
+    yawAngle -= dx * mouseSensitivity;
+    pitchAngle -= dy * mouseSensitivity;
+
+    if (pitchAngle > 89.0f) pitchAngle = 89.0f;
+    if (pitchAngle < -89.0f) pitchAngle = -89.0f;
+
+    ignoreWarp = true;
+    glutWarpPointer(centerX, centerY);
 
     glutPostRedisplay();
 }
@@ -809,6 +969,10 @@ void init()
     {
         printf("Una sau mai multe texturi nu s-au incarcat.\n");
     }
+
+    glutSetCursor(GLUT_CURSOR_NONE);
+    ignoreWarp = true;
+    glutWarpPointer(windowWidth / 2, windowHeight / 2);
 }
 
 int main(int argc, char** argv)
@@ -822,7 +986,15 @@ int main(int argc, char** argv)
 
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
+
     glutKeyboardFunc(keyboard);
+    glutKeyboardUpFunc(keyboardUp);
+
+    glutSpecialFunc(specialKeys);
+    glutSpecialUpFunc(specialKeysUp);
+
+    glutPassiveMotionFunc(mouseLook);
+    glutMotionFunc(mouseLook);
 
     glutMainLoop();
     return 0;

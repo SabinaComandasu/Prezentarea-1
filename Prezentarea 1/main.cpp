@@ -752,6 +752,46 @@ void updateMovement()
     }
 }
 
+void drawLampPost(float x, float z)
+{
+    float groundY = terrainHeight(x, z) - 0.15f;
+
+    glPushMatrix();
+    glTranslatef(x, groundY, z);
+
+    glDisable(GL_TEXTURE_2D);
+
+    // stalp principal
+    glColor3f(0.12f, 0.12f, 0.12f);
+    glPushMatrix();
+    drawTexturedCylinder(0.20f, 6.8f, 20);
+    glPopMatrix();
+
+    // brat orizontal
+    glPushMatrix();
+    glTranslatef(0.0f, 6.2f, 0.0f);
+    glRotatef(90.0f, 0.0f, 0.0f, 1.0f);   // face cilindrul orizontal pe axa X
+    drawTexturedCylinder(0.08f, 1.2f, 12);
+    glPopMatrix();
+
+    // suport vertical mic pentru bec
+    glPushMatrix();
+    glTranslatef(-1.2f, 6.2f, 0.0f);      // capatul bratului
+    drawTexturedCylinder(0.05f, 0.45f, 10);
+    glPopMatrix();
+
+    // becul
+    glColor3f(1.0f, 0.96f, 0.75f);
+    glPushMatrix();
+    glTranslatef(-1.2f, 5.78f, 0.0f);     // sub suportul vertical
+    drawTexturedSphere(0.28f, 14, 14);
+    glPopMatrix();
+
+    glEnable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    glPopMatrix();
+}
 void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -796,6 +836,10 @@ void display()
         drawSakuraTree(x, z);
     }
     // drawAxis();
+    drawLampPost(-10.0f, 8.0f);
+    drawLampPost(12.0f, 10.0f);
+    drawLampPost(8.0f, -12.0f);
+
     drawCrosshair();
     glutSwapBuffers();
     glutPostRedisplay();

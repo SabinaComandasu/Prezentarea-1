@@ -404,6 +404,7 @@ void drawPinkHouse(float x, float z)
 
     glPushMatrix();
     glTranslatef(x, groundY, z);
+    glScalef(1.8f, 1.8f, 1.8f);   // makes house ~80% bigger
 
     glDisable(GL_TEXTURE_2D);
 
@@ -758,6 +759,7 @@ void drawLampPost(float x, float z)
 
     glPushMatrix();
     glTranslatef(x, groundY, z);
+    glScalef(1.5f, 1.5f, 1.5f);   // bigger lamp posts
 
     glDisable(GL_TEXTURE_2D);
 
@@ -836,9 +838,9 @@ void display()
         drawSakuraTree(x, z);
     }
     // drawAxis();
-    drawLampPost(-10.0f, 8.0f);
-    drawLampPost(12.0f, 10.0f);
-    drawLampPost(8.0f, -12.0f);
+    drawLampPost(-20.0f, 0.0f);
+    drawLampPost(20.0f, 0.0f);
+    drawLampPost(0.0f, 20.0f);
 
     drawCrosshair();
     glutSwapBuffers();

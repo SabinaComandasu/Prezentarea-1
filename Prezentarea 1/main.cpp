@@ -36,6 +36,7 @@ GLuint texMountain = 0;
 GLuint texWater = 0;
 GLuint texWood = 0;
 GLuint texLeaves = 0;
+GLuint texMoon = 0;
 
 float degToRad(float a)
 {
@@ -116,6 +117,8 @@ void computeNormal(float x, float z, float& nx, float& ny, float& nz)
     }
 }
 
+
+
 void drawCircuit()
 {
     glEnable(GL_TEXTURE_2D);
@@ -161,16 +164,17 @@ void drawCircuit()
 void drawRelief()
 {
     glBindTexture(GL_TEXTURE_2D, texGrass);
+    glColor3f(0.75f, 0.75f, 0.75f);
 
-    const int N = 120;
-    const float size = 40.0f;
+    const int N = 160;
+    const float size = 49.0f;   // extend almost to cube walls
     const float step = (2.0f * size) / N;
 
     for (int i = 0; i < N; i++)
     {
         float z0 = -size + i * step;
         float z1 = z0 + step;
-        glColor3f(0.75f, 0.75f, 0.75f);
+
         glBegin(GL_TRIANGLE_STRIP);
         for (int j = 0; j <= N; j++)
         {
@@ -194,7 +198,6 @@ void drawRelief()
         glEnd();
     }
 }
-
 
 void drawFloor(float s)
 {
@@ -312,6 +315,122 @@ void drawTexturedSphere(float radius, int stacks, int slices)
         glEnd();
     }
 }
+
+void drawMoon(float x, float y, float z, float radius)
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, texMoon);
+
+    GLfloat emission[] = { 0.35f, 0.35f, 0.40f, 1.0f };
+    GLfloat noEmission[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+    glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emission);
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    drawTexturedSphere(radius, 24, 24);
+    glPopMatrix();
+
+    glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, noEmission);
+}
+
+void drawMoonRays(float x, float y, float z)
+{
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glDepthMask(GL_FALSE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+    glPushMatrix();
+    glTranslatef(x, y, z);
+
+    const float inner = 4.5f;   // start just outside moon
+    const float outer = 16.0f;  // ray length
+    const int rayCount = 8;
+
+    for (int i = 0; i < rayCount; i++)
+    {
+        float angle = i * 360.0f / rayCount;
+
+        glPushMatrix();
+        glRotatef(angle, 0.0f, 0.0f, 1.0f);
+
+        glBegin(GL_TRIANGLES);
+
+        // bright near moon
+        glColor4f(1.0f, 1.0f, 0.9f, 0.22f);
+        glVertex3f(0.0f, 0.0f, 0.0f);
+        glVertex3f(-1.2f, -inner, 0.0f);
+        glVertex3f(1.2f, -inner, 0.0f);
+
+        // fade outward
+        glColor4f(1.0f, 1.0f, 0.9f, 0.0f);
+        glVertex3f(-4.0f, -outer, 0.0f);
+        glVertex3f(4.0f, -outer, 0.0f);
+        glVertex3f(0.0f, -inner, 0.0f);
+
+        glEnd();
+
+        glPopMatrix();
+    }
+
+    glPopMatrix();
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_LIGHTING);
+}
+
+void drawMoonGlow(float x, float y, float z)
+{
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glDepthMask(GL_FALSE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+    glColor4f(1.0f, 1.0f, 0.9f, 0.10f);
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    glutSolidSphere(8.5f, 24, 24);
+    glPopMatrix();
+
+    glColor4f(1.0f, 1.0f, 0.9f, 0.05f);
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    glutSolidSphere(11.0f, 24, 24);
+    glPopMatrix();
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_LIGHTING);
+}
+
+
+void setMoonLight()
+{
+    GLfloat lightPos[] = { -45.0f, 31.8f, -45.0f, 1.0f };
+
+    GLfloat ambient[] = { 0.08f, 0.08f, 0.12f, 1.0f };
+    GLfloat diffuse[] = { 1.2f, 1.2f, 1.35f, 1.0f };
+    GLfloat specular[] = { 1.3f, 1.3f, 1.45f, 1.0f };
+
+    glEnable(GL_LIGHT4);
+    glLightfv(GL_LIGHT4, GL_POSITION, lightPos);
+    glLightfv(GL_LIGHT4, GL_AMBIENT, ambient);
+    glLightfv(GL_LIGHT4, GL_DIFFUSE, diffuse);
+    glLightfv(GL_LIGHT4, GL_SPECULAR, specular);
+
+    glLightf(GL_LIGHT4, GL_CONSTANT_ATTENUATION, 1.0f);
+    glLightf(GL_LIGHT4, GL_LINEAR_ATTENUATION, 0.003f);
+    glLightf(GL_LIGHT4, GL_QUADRATIC_ATTENUATION, 0.00005f);
+}
 void drawSakuraTree(float x, float z)
 {
     float groundY = terrainHeight(x, z) - 0.35f;
@@ -393,6 +512,9 @@ void drawSakuraTree(float x, float z)
 
     glPopMatrix();
 }
+
+
+
 void drawPinkHouse(float x, float z)
 {
     const float w = 7.5f;
@@ -691,9 +813,9 @@ void setLighting()
 {
     GLfloat lightPos[] = { 15.0f, 25.0f, 15.0f, 1.0f };
 
-    GLfloat ambient[] = { 0.02f, 0.02f, 0.03f, 1.0f };
-    GLfloat diffuse[] = { 0.35f, 0.35f, 0.40f, 1.0f };
-    GLfloat specular[] = { 0.6f,  0.6f,  0.6f,  1.0f };
+    GLfloat ambient[] = { 0.005f, 0.005f, 0.01f, 1.0f };
+    GLfloat diffuse[] = { 0.12f, 0.12f, 0.16f, 1.0f };
+    GLfloat specular[] = { 0.18f, 0.18f, 0.22f, 1.0f };
 
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
@@ -703,8 +825,8 @@ void setLighting()
     setLampLight(GL_LIGHT1, -20.0f, 0.0f);
     setLampLight(GL_LIGHT2, 20.0f, 0.0f);
     setLampLight(GL_LIGHT3, 0.0f, 20.0f);
+    setMoonLight();
 }
-
 void drawCrosshair()
 {
     glMatrixMode(GL_PROJECTION);
@@ -879,6 +1001,10 @@ void display()
     drawFloor(sceneHalf);
     drawCeiling(sceneHalf, sceneHeight);
     drawWalls(sceneHalf, sceneHeight);
+    drawMoonGlow(-45.0f, 31.8f, -45.0f);
+
+    drawMoon(-45.0f, 31.8f, -45.0f, 9.0f); 
+    drawMoonRays(-45.0f, 31.8f, -44.8f);
     drawRelief();
     drawCircuit();
     drawPinkHouse(0.0f, 0.0f);
@@ -890,7 +1016,6 @@ void display()
 
         float x = cos(angle) * r;
         float z = sin(angle) * r;
-
         drawSakuraTree(x, z);
     }
     // drawAxis();
@@ -1048,9 +1173,12 @@ void mouseLook(int x, int y)
 
 void init()
 {
-    glClearColor(0.12f, 0.12f, 0.16f, 1.0f);
-    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.04f, 0.04f, 0.08f, 1.0f);    glEnable(GL_DEPTH_TEST);
     glEnable(GL_TEXTURE_2D);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
@@ -1068,8 +1196,10 @@ void init()
     texWater = loadTexture("water.jpg");
     texWood = loadTexture("wood.jpg");
     texLeaves = loadTexture("leaves.jpg");
+    texMoon = loadTexture("moon.jpg");
 
-    if (texGrass == 0 || texSky == 0 || texMountain == 0 || texWater == 0 || texWood == 0 || texLeaves == 0)
+    if (texGrass == 0 || texSky == 0 || texMountain == 0 || texWater == 0 ||
+        texWood == 0 || texLeaves == 0 || texMoon == 0)
     {
         printf("Una sau mai multe texturi nu s-au incarcat.\n");
     }

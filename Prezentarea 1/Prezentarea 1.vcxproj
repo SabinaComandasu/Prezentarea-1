@@ -137,6 +137,7 @@
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="C:\Users\sabin\Desktop\moon.jpg" />
     <Image Include="grass.jpg" />
     <Image Include="leaves.jpg" />
     <Image Include="mountains.jpg" />

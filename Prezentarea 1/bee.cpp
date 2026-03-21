@@ -1,6 +1,7 @@
 #include "bee.h"
 #include "utils.h"
 #include "terrain.h"
+#include "ladybug.h"
 
 void drawBee(float x, float y, float z, float yawDeg)
 {
@@ -250,6 +251,25 @@ void resolveCollisions(float prevX, float prevY, float prevZ)
                     beeY = cY + (ey / d) * minDist;
                     beeZ = cZ + (ez / d) * minDist;
                 }
+            }
+        }
+    }
+
+    // Ladybug collision — push bee away from each ladybug
+    {
+        const float pushDist = 1.2f + 0.7f; // beeRadius + ladybugRadius
+        for (int i = 0; i < NUM_LADYBUGS; i++)
+        {
+            float ly = terrainHeight(ladybugs[i].x, ladybugs[i].z) + 0.25f;
+            float dx = beeX - ladybugs[i].x;
+            float dy = beeY - ly;
+            float dz = beeZ - ladybugs[i].z;
+            float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+            if (dist < pushDist && dist > 0.001f)
+            {
+                beeX = ladybugs[i].x + (dx / dist) * pushDist;
+                beeY = ly            + (dy / dist) * pushDist;
+                beeZ = ladybugs[i].z + (dz / dist) * pushDist;
             }
         }
     }

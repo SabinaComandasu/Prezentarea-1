@@ -4,6 +4,7 @@
 #include "lighting.h"
 #include "scene.h"
 #include "bee.h"
+#include "ladybug.h"
 
 void drawAxis()
 {
@@ -77,6 +78,7 @@ void display()
     glLoadIdentity();
 
     updateMovement();
+    updateLadybugs();
 
     // Third-person: camera always looks at the bee
     gluLookAt(
@@ -113,6 +115,7 @@ void display()
         drawSakuraTree(x, z);
     }
     drawBee(beeX, beeY, beeZ, beeYaw);
+    drawAllLadybugs();
     // drawAxis();
     drawLampPost(-20.0f, 0.0f);
     drawLampPost(20.0f, 0.0f);
@@ -172,6 +175,7 @@ void init()
         printf("Una sau mai multe texturi nu s-au incarcat.\n");
     }
 
+    initLadybugs();
     glutSetCursor(GLUT_CURSOR_NONE);
     ignoreWarp = true;
     glutWarpPointer(windowWidth / 2, windowHeight / 2);

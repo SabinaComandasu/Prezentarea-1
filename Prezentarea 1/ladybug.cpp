@@ -96,7 +96,7 @@ void drawLadybug(float x, float y, float z, float yaw)
     GLUquadric* q = gluNewQuadric();
 
     // --- Body (red ellipsoid) ---
-    glColor3f(0.85f, 0.05f, 0.05f);
+    glColor3f(1.0f, 0.0f, 0.5f);
     glPushMatrix();
     glScalef(0.38f, 0.25f, 0.5f);
     gluSphere(q, 1.0f, 14, 10);

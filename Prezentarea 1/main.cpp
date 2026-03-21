@@ -10,9 +10,18 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Bee (player) state
+float beeX = 0.0f, beeY = 8.0f, beeZ = 35.0f;
+float beeYaw = 180.0f;
+float beeTargetYaw = 180.0f;
+
+// Third-person camera
 float camX = 0.0f, camY = 8.0f, camZ = 35.0f;
 float yawAngle = 180.0f;
-float pitchAngle = -5.0f;
+float pitchAngle = -10.0f;
+
+const float camFollowDist  = 10.0f;
+const float camFollowHeight = 4.0f;
 
 float moveSpeed = 1.0f;
 float turnSpeed = 3.0f;
@@ -167,7 +176,7 @@ void drawRelief()
     glColor3f(0.75f, 0.75f, 0.75f);
 
     const int N = 160;
-    const float size = 49.0f;   // extend almost to cube walls
+    const float size = 50.0f;
     const float step = (2.0f * size) / N;
 
     for (int i = 0; i < N; i++)
@@ -877,51 +886,459 @@ void drawCrosshair()
     glMatrixMode(GL_MODELVIEW);
 }
 
+void resolveCollisions()
+{
+    const float beeRadius  = 1.2f;
+    const float sceneLimit = 48.0f;
+    const float sceneTop   = 33.0f;
+
+    // Scene boundary walls
+    if (beeX >  sceneLimit) beeX =  sceneLimit;
+    if (beeX < -sceneLimit) beeX = -sceneLimit;
+    if (beeZ >  sceneLimit) beeZ =  sceneLimit;
+    if (beeZ < -sceneLimit) beeZ = -sceneLimit;
+    if (beeY >  sceneTop)   beeY =  sceneTop;
+
+    // Terrain floor
+    float ground = terrainHeight(beeX, beeZ);
+    float minY = ground + beeRadius + 0.5f;
+    if (beeY < minY) beeY = minY;
+
+    // Pink house AABB (centered at origin)
+    {
+        float houseGround = terrainHeight(0.0f, 0.0f) - 0.55f;
+        float halfW = 7.5f * 0.5f + beeRadius;
+        float halfD = 5.8f * 0.5f + beeRadius;
+        float houseTop = houseGround + 4.2f + 2.6f + beeRadius;
+
+        if (beeX > -halfW && beeX < halfW &&
+            beeZ > -halfD && beeZ < halfD &&
+            beeY  < houseTop && beeY > houseGround - 1.0f)
+        {
+            float oPX = halfW - beeX, oNX = beeX + halfW;
+            float oPZ = halfD - beeZ, oNZ = beeZ + halfD;
+
+            float minO = oPX;
+            float rx = halfW, rz = beeZ;
+            if (oNX < minO) { minO = oNX; rx = -halfW; rz = beeZ; }
+            if (oPZ < minO) { minO = oPZ; rx = beeX;   rz = halfD; }
+            if (oNZ < minO) {              rx = beeX;   rz = -halfD; }
+
+            beeX = rx;
+            beeZ = rz;
+        }
+    }
+
+    // Sakura trees — cylinder collision for trunk + sphere collision for canopy
+    {
+        const float trunkRadius = 1.2f + beeRadius;
+        const float r = 34.0f;
+        for (int i = 0; i < 9; i++)
+        {
+            float angle = i * 2.0f * (float)M_PI / 9.0f;
+            float tx = cosf(angle) * r;
+            float tz = sinf(angle) * r;
+            float tGroundY = terrainHeight(tx, tz) - 0.35f;
+
+            float dx = beeX - tx;
+            float dz = beeZ - tz;
+            float horizDist = sqrtf(dx * dx + dz * dz);
+            if (horizDist < trunkRadius && horizDist > 0.001f)
+            {
+                beeX = tx + (dx / horizDist) * trunkRadius;
+                beeZ = tz + (dz / horizDist) * trunkRadius;
+            }
+
+            struct { float ox, oy, oz, r; } clusters[] = {
+                {  0.0f, 12.0f,  0.0f, 3.8f },
+                { -2.5f, 11.0f,  0.0f, 2.6f },
+                {  2.5f, 11.2f,  0.3f, 2.7f },
+                {  0.0f, 10.8f,  2.5f, 2.5f },
+                {  0.0f, 10.6f, -2.5f, 2.5f },
+                { -1.8f, 13.0f,  1.5f, 2.1f },
+                {  1.8f, 13.2f, -1.2f, 2.1f },
+            };
+            for (auto& c : clusters)
+            {
+                float cX = tx + c.ox, cY = tGroundY + c.oy, cZ = tz + c.oz;
+                float minDist = c.r + beeRadius;
+                float ex = beeX - cX, ey = beeY - cY, ez = beeZ - cZ;
+                float d = sqrtf(ex * ex + ey * ey + ez * ez);
+                if (d < minDist && d > 0.001f)
+                {
+                    beeX = cX + (ex / d) * minDist;
+                    beeY = cY + (ey / d) * minDist;
+                    beeZ = cZ + (ez / d) * minDist;
+                }
+            }
+        }
+    }
+}
+
 void updateMovement()
 {
     float yawRad = degToRad(yawAngle);
+    float fwdX = sinf(yawRad), fwdZ = cosf(yawRad);
+    float rgtX = cosf(yawRad), rgtZ = -sinf(yawRad);
 
-    float dirX = sinf(yawRad);
-    float dirZ = cosf(yawRad);
+    float horizontalSpeed = 0.18f;
+    float verticalSpeed   = 0.08f;
 
-    float rightX = cosf(yawRad);
-    float rightZ = -sinf(yawRad);
+    float moveX = 0.0f, moveZ = 0.0f;
+    if (keyW) { moveX += fwdX; moveZ += fwdZ; }
+    if (keyS) { moveX -= fwdX; moveZ -= fwdZ; }
+    if (keyA) { moveX += rgtX; moveZ += rgtZ; }
+    if (keyD) { moveX -= rgtX; moveZ -= rgtZ; }
 
-    float verticalSpeed = 0.08f;   // slower than 0.25
-    float horizontalSpeed = 0.18f; // smooth continuous WASD
-
-    if (keyW)
+    float moveDist = sqrtf(moveX * moveX + moveZ * moveZ);
+    if (moveDist > 0.001f)
     {
-        camX += dirX * horizontalSpeed;
-        camZ += dirZ * horizontalSpeed;
+        beeX += (moveX / moveDist) * horizontalSpeed;
+        beeZ += (moveZ / moveDist) * horizontalSpeed;
+        beeTargetYaw = atan2f(moveX, moveZ) * 180.0f / (float)M_PI;
     }
 
-    if (keyS)
-    {
-        camX -= dirX * horizontalSpeed;
-        camZ -= dirZ * horizontalSpeed;
-    }
+    float diff = beeTargetYaw - beeYaw;
+    while (diff >  180.0f) diff -= 360.0f;
+    while (diff < -180.0f) diff += 360.0f;
+    beeYaw += diff * 0.15f;
 
-    if (keyA)
-    {
-        camX += rightX * horizontalSpeed;
-        camZ += rightZ * horizontalSpeed;
-    }
-
-    if (keyD)
-    {
-        camX -= rightX * horizontalSpeed;
-        camZ -= rightZ * horizontalSpeed;
-    }
-
-    if (keySpace)
-        camY += verticalSpeed;
-
+    if (keySpace) beeY += verticalSpeed;
     if (keyShift)
     {
-        camY -= verticalSpeed;
-        if (camY < 2.0f) camY = 2.0f;
+        beeY -= verticalSpeed;
+        if (beeY < 2.0f) beeY = 2.0f;
     }
+
+    resolveCollisions();
+
+    // Camera orbits behind the camera-facing direction (yawAngle), not beeYaw
+    float pitchRad  = degToRad(pitchAngle);
+    float camYawRad = degToRad(yawAngle);
+    camX = beeX - sinf(camYawRad) * cosf(pitchRad) * camFollowDist;
+    camY = beeY - sinf(pitchRad)  * camFollowDist + camFollowHeight;
+    camZ = beeZ - cosf(camYawRad) * cosf(pitchRad) * camFollowDist;
+}
+
+void drawBee(float x, float y, float z, float yawDeg)
+{
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    glRotatef(yawDeg + 180.0f, 0.0f, 1.0f, 0.0f);
+    glRotatef(pitchAngle, 1.0f, 0.0f, 0.0f);
+
+    glDisable(GL_TEXTURE_2D);
+
+    // --- Body (abdomen) - elongated sphere, yellow with black stripes ---
+    // Base yellow body
+    glColor3f(1.0f, 0.85f, 0.0f);
+    glPushMatrix();
+    glScalef(0.5f, 0.45f, 0.85f);
+    GLUquadric* q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 12);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Black stripe 1
+    glColor3f(0.05f, 0.05f, 0.05f);
+    glPushMatrix();
+    glTranslatef(0.0f, 0.0f, 0.2f);
+    glScalef(0.51f, 0.46f, 0.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 8);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Black stripe 2
+    glPushMatrix();
+    glTranslatef(0.0f, 0.0f, -0.2f);
+    glScalef(0.51f, 0.46f, 0.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 8);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Head ---
+    glColor3f(0.1f, 0.08f, 0.0f);
+    glPushMatrix();
+    glTranslatef(0.0f, 0.1f, -0.95f);
+    glScalef(0.38f, 0.36f, 0.35f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 14, 10);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Eyes (small white spheres on head) ---
+    glColor3f(0.9f, 0.9f, 0.9f);
+    glPushMatrix();
+    glTranslatef(0.2f, 0.18f, -1.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.1f, 8, 6);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(-0.2f, 0.18f, -1.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.1f, 8, 6);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Stinger ---
+    glColor3f(0.15f, 0.1f, 0.0f);
+    glPushMatrix();
+    glTranslatef(0.0f, -0.05f, 0.9f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.06f, 0.0f, 0.35f, 8, 1);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Antennae ---
+    glColor3f(0.1f, 0.08f, 0.0f);
+    // Left antenna
+    glPushMatrix();
+    glTranslatef(-0.15f, 0.3f, -1.1f);
+    glRotatef(-30.0f, 0.0f, 0.0f, 1.0f);
+    glRotatef(-40.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.03f, 0.02f, 0.45f, 6, 1);
+    gluDeleteQuadric(q);
+    // tip
+    glTranslatef(0.0f, 0.0f, 0.45f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.06f, 6, 5);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Right antenna
+    glPushMatrix();
+    glTranslatef(0.15f, 0.3f, -1.1f);
+    glRotatef(30.0f, 0.0f, 0.0f, 1.0f);
+    glRotatef(-40.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.03f, 0.02f, 0.45f, 6, 1);
+    gluDeleteQuadric(q);
+    glTranslatef(0.0f, 0.0f, 0.45f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.06f, 6, 5);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Wings (semi-transparent flat quads) ---
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(0.8f, 0.9f, 1.0f, 0.55f);
+    glDisable(GL_CULL_FACE);
+
+    // Left wing
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex3f(-0.55f, 0.3f, -0.1f);
+    glVertex3f(-0.55f, 0.3f, -0.6f);
+    glVertex3f(-1.3f,  0.55f, -0.55f);
+    glVertex3f(-1.5f,  0.5f,  -0.1f);
+    glVertex3f(-1.2f,  0.45f,  0.25f);
+    glVertex3f(-0.55f, 0.3f,   0.3f);
+    glEnd();
+
+    // Right wing
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex3f(0.55f, 0.3f, -0.1f);
+    glVertex3f(0.55f, 0.3f, -0.6f);
+    glVertex3f(1.3f,  0.55f, -0.55f);
+    glVertex3f(1.5f,  0.5f,  -0.1f);
+    glVertex3f(1.2f,  0.45f,  0.25f);
+    glVertex3f(0.55f, 0.3f,   0.3f);
+    glEnd();
+
+    glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+
+    glPopMatrix();
+}
+
+void updateMovement()
+{
+    float yawRad = degToRad(yawAngle);
+    float fwdX = sinf(yawRad), fwdZ = cosf(yawRad);
+    float rgtX = cosf(yawRad), rgtZ = -sinf(yawRad);
+
+    float horizontalSpeed = 0.18f;
+    float verticalSpeed   = 0.08f;
+
+    // Accumulate movement vector from keys
+    float moveX = 0.0f, moveZ = 0.0f;
+    if (keyW) { moveX += fwdX; moveZ += fwdZ; }
+    if (keyS) { moveX -= fwdX; moveZ -= fwdZ; }
+    if (keyA) { moveX += rgtX; moveZ += rgtZ; }
+    if (keyD) { moveX -= rgtX; moveZ -= rgtZ; }
+
+    float moveDist = sqrtf(moveX * moveX + moveZ * moveZ);
+    if (moveDist > 0.001f)
+    {
+        beeX += (moveX / moveDist) * horizontalSpeed;
+        beeZ += (moveZ / moveDist) * horizontalSpeed;
+        beeTargetYaw = atan2f(moveX, moveZ) * 180.0f / (float)M_PI;
+    }
+
+    // Smoothly rotate bee body toward target yaw (shortest path)
+    float diff = beeTargetYaw - beeYaw;
+    while (diff >  180.0f) diff -= 360.0f;
+    while (diff < -180.0f) diff += 360.0f;
+    beeYaw += diff * 0.15f;
+
+    if (keySpace) beeY += verticalSpeed;
+    if (keyShift)
+    {
+        beeY -= verticalSpeed;
+        if (beeY < 2.0f) beeY = 2.0f;
+    }
+
+    resolveCollisions();
+
+    // Camera orbits behind the camera-facing direction (yawAngle), not beeYaw
+    float pitchRad  = degToRad(pitchAngle);
+    float camYawRad = degToRad(yawAngle);
+    camX = beeX - sinf(camYawRad) * cosf(pitchRad) * camFollowDist;
+    camY = beeY - sinf(pitchRad)  * camFollowDist + camFollowHeight;
+    camZ = beeZ - cosf(camYawRad) * cosf(pitchRad) * camFollowDist;
+}
+
+void drawBee(float x, float y, float z, float yawDeg)
+{
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    glRotatef(yawDeg + 180.0f, 0.0f, 1.0f, 0.0f);
+    glRotatef(pitchAngle, 1.0f, 0.0f, 0.0f);
+
+    glDisable(GL_TEXTURE_2D);
+
+    // --- Body (abdomen) - elongated sphere, yellow with black stripes ---
+    // Base yellow body
+    glColor3f(1.0f, 0.85f, 0.0f);
+    glPushMatrix();
+    glScalef(0.5f, 0.45f, 0.85f);
+    GLUquadric* q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 12);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Black stripe 1
+    glColor3f(0.05f, 0.05f, 0.05f);
+    glPushMatrix();
+    glTranslatef(0.0f, 0.0f, 0.2f);
+    glScalef(0.51f, 0.46f, 0.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 8);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Black stripe 2
+    glPushMatrix();
+    glTranslatef(0.0f, 0.0f, -0.2f);
+    glScalef(0.51f, 0.46f, 0.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 16, 8);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Head ---
+    glColor3f(0.1f, 0.08f, 0.0f);
+    glPushMatrix();
+    glTranslatef(0.0f, 0.1f, -0.95f);
+    glScalef(0.38f, 0.36f, 0.35f);
+    q = gluNewQuadric();
+    gluSphere(q, 1.0f, 14, 10);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Eyes (small white spheres on head) ---
+    glColor3f(0.9f, 0.9f, 0.9f);
+    glPushMatrix();
+    glTranslatef(0.2f, 0.18f, -1.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.1f, 8, 6);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(-0.2f, 0.18f, -1.18f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.1f, 8, 6);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Stinger ---
+    glColor3f(0.15f, 0.1f, 0.0f);
+    glPushMatrix();
+    glTranslatef(0.0f, -0.05f, 0.9f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.06f, 0.0f, 0.35f, 8, 1);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Antennae ---
+    glColor3f(0.1f, 0.08f, 0.0f);
+    // Left antenna
+    glPushMatrix();
+    glTranslatef(-0.15f, 0.3f, -1.1f);
+    glRotatef(-30.0f, 0.0f, 0.0f, 1.0f);
+    glRotatef(-40.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.03f, 0.02f, 0.45f, 6, 1);
+    gluDeleteQuadric(q);
+    // tip
+    glTranslatef(0.0f, 0.0f, 0.45f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.06f, 6, 5);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // Right antenna
+    glPushMatrix();
+    glTranslatef(0.15f, 0.3f, -1.1f);
+    glRotatef(30.0f, 0.0f, 0.0f, 1.0f);
+    glRotatef(-40.0f, 1.0f, 0.0f, 0.0f);
+    q = gluNewQuadric();
+    gluCylinder(q, 0.03f, 0.02f, 0.45f, 6, 1);
+    gluDeleteQuadric(q);
+    glTranslatef(0.0f, 0.0f, 0.45f);
+    q = gluNewQuadric();
+    gluSphere(q, 0.06f, 6, 5);
+    gluDeleteQuadric(q);
+    glPopMatrix();
+
+    // --- Wings (semi-transparent flat quads) ---
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(0.8f, 0.9f, 1.0f, 0.55f);
+    glDisable(GL_CULL_FACE);
+
+    // Left wing
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex3f(-0.55f, 0.3f, -0.1f);
+    glVertex3f(-0.55f, 0.3f, -0.6f);
+    glVertex3f(-1.3f,  0.55f, -0.55f);
+    glVertex3f(-1.5f,  0.5f,  -0.1f);
+    glVertex3f(-1.2f,  0.45f,  0.25f);
+    glVertex3f(-0.55f, 0.3f,   0.3f);
+    glEnd();
+
+    // Right wing
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex3f(0.55f, 0.3f, -0.1f);
+    glVertex3f(0.55f, 0.3f, -0.6f);
+    glVertex3f(1.3f,  0.55f, -0.55f);
+    glVertex3f(1.5f,  0.5f,  -0.1f);
+    glVertex3f(1.2f,  0.45f,  0.25f);
+    glVertex3f(0.55f, 0.3f,   0.3f);
+    glEnd();
+
+    glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+
+    glPopMatrix();
 }
 
 void drawLampPost(float x, float z)
@@ -978,16 +1395,11 @@ void display()
     glLoadIdentity();
 
     updateMovement();
-    float yawRad = degToRad(yawAngle);
-    float pitchRad = degToRad(pitchAngle);
 
-    float dirX = cosf(pitchRad) * sinf(yawRad);
-    float dirY = sinf(pitchRad);
-    float dirZ = cosf(pitchRad) * cosf(yawRad);
-
+    // Third-person: camera always looks at the bee
     gluLookAt(
         camX, camY, camZ,
-        camX + dirX, camY + dirY, camZ + dirZ,
+        beeX, beeY, beeZ,
         0.0f, 1.0f, 0.0f
     );
 
@@ -1018,6 +1430,7 @@ void display()
         float z = sin(angle) * r;
         drawSakuraTree(x, z);
     }
+    drawBee(beeX, beeY, beeZ, beeYaw);
     // drawAxis();
     drawLampPost(-20.0f, 0.0f);
     drawLampPost(20.0f, 0.0f);

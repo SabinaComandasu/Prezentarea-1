@@ -5,6 +5,7 @@
 #include "scene.h"
 #include "bee.h"
 #include "ladybug.h"
+#include "cat.h"
 
 void drawAxis()
 {
@@ -79,6 +80,7 @@ void display()
 
     updateMovement();
     updateLadybugs();
+    updateCat();
 
     // Third-person: camera always looks at the bee
     gluLookAt(
@@ -116,6 +118,11 @@ void display()
     }
     drawBee(beeX, beeY, beeZ, beeYaw);
     drawAllLadybugs();
+    drawCat();
+    drawKitten();
+    drawOrangeKitten();
+    drawWhiteKitten();
+    drawGrayKitten();
     // drawAxis();
     drawLampPost(-20.0f, 0.0f);
     drawLampPost(20.0f, 0.0f);
@@ -176,6 +183,7 @@ void init()
     }
 
     initLadybugs();
+    initCat();
     glutSetCursor(GLUT_CURSOR_NONE);
     ignoreWarp = true;
     glutWarpPointer(windowWidth / 2, windowHeight / 2);

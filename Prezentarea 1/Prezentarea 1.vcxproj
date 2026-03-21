@@ -131,6 +131,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="bee.cpp" />
+    <ClCompile Include="cat.cpp" />
     <ClCompile Include="globals.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="ladybug.cpp" />
@@ -144,6 +145,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\..\Downloads\stb_image.h" />
     <ClInclude Include="bee.h" />
+    <ClInclude Include="cat.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="ladybug.h" />

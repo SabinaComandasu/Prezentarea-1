@@ -22,7 +22,7 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{0a8eaadc-2fc7-45f5-8e43-6ed62be47778}</ProjectGuid>
-    <RootNamespace>Prezentarea1</RootNamespace>
+    <RootNamespace>BlossomHaven</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
